@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WooCommerce Order Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <style>
+        @media print {
+            html, body {
+                height: auto !important;
+                overflow: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            body > *:not(#printable-area) {
+                display: none !important;
+            }
+
+            #printable-area {
+                display: block !important;
+                position: static !important;
+                visibility: visible !important;
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+
+            #printable-area * {
+                visibility: visible !important;
+            }
+
+            @page {
+                margin: 0.5in;
+                size: auto;
+            }
+        }
+
+        .order-row:hover {
+            transform: translateX(4px);
+            transition: transform 0.2s ease;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pending { background-color: #fef3c7; color: #92400e; }
+        .status-processing { background-color: #dbeafe; color: #1e40af; }
+        .status-on-hold { background-color: #f3e8ff; color: #6b21a8; }
+        .status-completed { background-color: #d1fae5; color: #065f46; }
+        .status-cancelled { background-color: #fee2e2; color: #991b1b; }
+        .status-refunded { background-color: #f3f4f6; color: #374151; }
+        .status-failed { background-color: #fecaca; color: #7f1d1d; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md fade-in">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-slate-900 rounded-xl mb-4">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                    </svg>
+                </div>
+                <h1 class="text-3xl font-bold text-slate-900 mb-2">WooCommerce Dashboard</h1>
+                <p class="text-slate-600 text-sm">Enter your credentials to manage orders</p>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+                <p class="text-xs text-blue-800">
+                    <strong>Required:</strong> Your user must have Shop Manager or Administrator role permissions.
+                </p>
+            </div>
+
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">WordPress Site URL</label>
+                    <input type="url" id="site-url" required
+                           placeholder="https://yoursite.com"
+                           class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Consumer Key</label>
+                    <input type="text" id="consumer-key" required
+                           placeholder="ck_xxxxxxxxxxxxxxxx"
+                           class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Consumer Secret</label>
+                    <input type="password" id="consumer-secret" required
+                           placeholder="cs_xxxxxxxxxxxxxxxx"
+                           class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none transition">
+                </div>
+                <div id="login-error" class="hidden bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm"></div>
+                <button type="submit"
+                        class="w-full bg-slate-900 text-white font-semibold py-3 rounded-lg hover:bg-slate-800 transition shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]">
+                    Connect to Store
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard Screen -->
+    <div id="dashboard-screen" class="hidden min-h-screen">
+        <!-- Header -->
+        <header class="bg-slate-900 border-b border-slate-700 shadow-xl">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold text-white">Order Management</h1>
+                            <p class="text-slate-400 text-xs" id="store-name">Loading...</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button id="refresh-btn"
+                                class="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition text-sm font-medium shadow-lg">
+                            Refresh Orders
+                        </button>
+                        <button id="logout-btn"
+                                class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium shadow-lg">
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+                <!-- Orders List -->
+                <div class="lg:col-span-2 bg-white rounded-2xl shadow-xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold text-slate-900">Processing Orders</h2>
+                        <span id="order-count" class="text-sm text-slate-600 font-medium"></span>
+                    </div>
+                    <div id="loading-orders" class="text-center py-12">
+                        <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-slate-900 border-t-transparent"></div>
+                        <p class="text-slate-600 mt-4">Loading orders...</p>
+                    </div>
+                    <div id="orders-error" class="hidden bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm"></div>
+                    <div id="orders-list" class="hidden space-y-2"></div>
+                    <div id="pagination" class="hidden mt-6 flex justify-between items-center border-t border-slate-200 pt-4">
+                        <button id="prev-btn" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                            Previous
+                        </button>
+                        <span id="page-info" class="text-sm text-slate-600 font-medium"></span>
+                        <button id="next-btn" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                            Next
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Order Details -->
+                <div class="lg:col-span-3 bg-white rounded-2xl shadow-xl p-6">
+                    <div id="no-order-selected" class="flex flex-col items-center justify-center h-full text-center py-12">
+                        <svg class="w-24 h-24 text-slate-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <h3 class="text-xl font-semibold text-slate-900 mb-2">Select an Order</h3>
+                        <p class="text-slate-600">Choose an order from the list to view details and print documents</p>
+                    </div>
+                    <div id="order-details" class="hidden"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Area -->
+    <div id="printable-area" class="hidden"></div>
+
+    <script>
+        // Supabase Configuration
+
+        // State Management
+        let credentials = null;
+        let orders = [];
+        let selectedOrder = null;
+        let currentPage = 1;
+        let totalPages = 1;
+        let totalOrders = 0;
+
+        // DOM Elements
+        const loginScreen = document.getElementById('login-screen');
+        const dashboardScreen = document.getElementById('dashboard-screen');
+        const loginForm = document.getElementById('login-form');
+        const loginError = document.getElementById('login-error');
+        const ordersError = document.getElementById('orders-error');
+        const loadingOrders = document.getElementById('loading-orders');
+        const ordersList = document.getElementById('orders-list');
+        const noOrderSelected = document.getElementById('no-order-selected');
+        const orderDetails = document.getElementById('order-details');
+        const refreshBtn = document.getElementById('refresh-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const storeName = document.getElementById('store-name');
+        const paginationDiv = document.getElementById('pagination');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const pageInfo = document.getElementById('page-info');
+        const orderCount = document.getElementById('order-count');
+
+        // Initialize
+        function init() {
+            // Pre-fill form from config.js if available
+            if (window.WC_CONFIG) {
+                const siteUrlInput = document.getElementById('site-url');
+                const consumerKeyInput = document.getElementById('consumer-key');
+                const consumerSecretInput = document.getElementById('consumer-secret');
+
+                if (window.WC_CONFIG.siteUrl && window.WC_CONFIG.siteUrl !== 'https://yoursite.com') {
+                    siteUrlInput.value = window.WC_CONFIG.siteUrl;
+                }
+                if (window.WC_CONFIG.consumerKey && !window.WC_CONFIG.consumerKey.startsWith('ck_xxxx')) {
+                    consumerKeyInput.value = window.WC_CONFIG.consumerKey;
+                }
+                if (window.WC_CONFIG.consumerSecret && !window.WC_CONFIG.consumerSecret.startsWith('cs_xxxx')) {
+                    consumerSecretInput.value = window.WC_CONFIG.consumerSecret;
+                }
+            }
+
+            const savedCreds = sessionStorage.getItem('wc_credentials');
+            if (savedCreds) {
+                credentials = JSON.parse(savedCreds);
+                showDashboard();
+            }
+        }
+
+        // Login Handler
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            loginError.classList.add('hidden');
+
+            const siteUrl = document.getElementById('site-url').value.trim().replace(/\/$/, '');
+            const consumerKey = document.getElementById('consumer-key').value.trim();
+            const consumerSecret = document.getElementById('consumer-secret').value.trim();
+
+            credentials = { siteUrl, consumerKey, consumerSecret };
+
+            try {
+                // Test connection by fetching orders
+                await fetchOrders();
+                sessionStorage.setItem('wc_credentials', JSON.stringify(credentials));
+                showDashboard();
+            } catch (error) {
+                loginError.textContent = error.message;
+                loginError.classList.remove('hidden');
+                credentials = null;
+            }
+        });
+
+        // Logout Handler
+        logoutBtn.addEventListener('click', () => {
+            sessionStorage.removeItem('wc_credentials');
+            credentials = null;
+            orders = [];
+            selectedOrder = null;
+            currentPage = 1;
+            totalPages = 1;
+            totalOrders = 0;
+            loginScreen.classList.remove('hidden');
+            dashboardScreen.classList.add('hidden');
+            loginForm.reset();
+        });
+
+        // Refresh Handler
+        refreshBtn.addEventListener('click', () => {
+            currentPage = 1;
+            fetchOrders();
+        });
+
+        // Pagination Handlers
+        prevBtn.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                fetchOrders();
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                fetchOrders();
+            }
+        });
+
+        // Show Dashboard
+        function showDashboard() {
+            loginScreen.classList.add('hidden');
+            dashboardScreen.classList.remove('hidden');
+            storeName.textContent = credentials.siteUrl;
+            fetchOrders();
+        }
+
+        // Fetch Orders
+        async function fetchOrders() {
+            loadingOrders.classList.remove('hidden');
+            ordersList.classList.add('hidden');
+            ordersError.classList.add('hidden');
+
+            try {
+                // WooCommerce uses different auth methods for HTTP vs HTTPS
+                const isHttps = credentials.siteUrl.startsWith('https://');
+                let url = `${credentials.siteUrl}/wp-json/wc/v3/orders?status=processing&per_page=15&page=${currentPage}&orderby=date&order=desc`;
+                let fetchOptions = {};
+
+                if (isHttps) {
+                    // For HTTPS, use query parameters
+                    url += `&consumer_key=${encodeURIComponent(credentials.consumerKey)}&consumer_secret=${encodeURIComponent(credentials.consumerSecret)}`;
+                } else {
+                    // For HTTP, use Basic Auth header
+                    const auth = btoa(`${credentials.consumerKey}:${credentials.consumerSecret}`);
+                    fetchOptions = {
+                        headers: {
+                            'Authorization': `Basic ${auth}`
+                        }
+                    };
+                }
+
+                const response = await fetch(url, fetchOptions);
+
+                // Get pagination info from headers
+                totalOrders = parseInt(response.headers.get('X-WP-Total') || '0');
+                totalPages = parseInt(response.headers.get('X-WP-TotalPages') || '1');
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMessage = `Authentication failed (${response.status}).`;
+
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        if (errorData.message) {
+                            errorMessage = errorData.message;
+                        }
+                    } catch (e) {
+                        // Not JSON, use default message
+                    }
+
+                    throw new Error(`${errorMessage} Please verify your credentials and ensure your user has Shop Manager or Administrator role.`);
+                }
+
+                orders = await response.json();
+
+                // Log the first order's line items to see the structure
+                if (orders.length > 0 && orders[0].line_items.length > 0) {
+                    console.log('Sample line item structure:', orders[0].line_items[0]);
+                }
+
+                // Fetch product images for all line items
+                await enrichOrdersWithImages();
+
+                loadingOrders.classList.add('hidden');
+                renderOrders();
+                renderPagination();
+            } catch (error) {
+                loadingOrders.classList.add('hidden');
+                ordersError.textContent = error.message;
+                ordersError.classList.remove('hidden');
+            }
+        }
+
+        // Enrich orders with product images
+        async function enrichOrdersWithImages() {
+            const isHttps = credentials.siteUrl.startsWith('https://');
+
+            for (const order of orders) {
+                for (const item of order.line_items) {
+                    // Check if image already exists in the item data
+                    if (item.image && item.image.src) {
+                        console.log('Image already exists for:', item.name);
+                        continue;
+                    }
+
+                    if (item.product_id) {
+                        try {
+                            let productUrl = `${credentials.siteUrl}/wp-json/wc/v3/products/${item.product_id}`;
+                            let fetchOptions = {};
+
+                            if (isHttps) {
+                                productUrl += `?consumer_key=${encodeURIComponent(credentials.consumerKey)}&consumer_secret=${encodeURIComponent(credentials.consumerSecret)}`;
+                            } else {
+                                const auth = btoa(`${credentials.consumerKey}:${credentials.consumerSecret}`);
+                                fetchOptions = {
+                                    headers: {
+                                        'Authorization': `Basic ${auth}`
+                                    }
+                                };
+                            }
+
+                            const productResponse = await fetch(productUrl, fetchOptions);
+                            if (productResponse.ok) {
+                                const product = await productResponse.json();
+                                console.log(`Product ${item.name} images:`, product.images);
+                                if (product.images && product.images.length > 0) {
+                                    item.image = product.images[0];
+                                    console.log(`Added image for ${item.name}:`, item.image.src);
+                                }
+                            } else {
+                                console.error(`Failed to fetch product ${item.product_id}: ${productResponse.status}`);
+                            }
+                        } catch (error) {
+                            console.error(`Failed to fetch image for product ${item.product_id}:`, error);
+                        }
+                    }
+                }
+            }
+            console.log('Enriched orders:', orders);
+        }
+
+        // Render Orders List
+        function renderOrders() {
+            ordersList.innerHTML = '';
+            ordersList.classList.remove('hidden');
+
+            if (orders.length === 0) {
+                ordersList.innerHTML = '<p class="text-slate-600 text-center py-8">No orders found</p>';
+                return;
+            }
+
+            orders.forEach(order => {
+                const orderDiv = document.createElement('div');
+                orderDiv.className = 'order-row p-4 border border-slate-200 rounded-lg cursor-pointer hover:border-slate-900 hover:shadow-md transition';
+                orderDiv.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="font-bold text-slate-900">#${order.number}</span>
+                        <span class="status-badge status-${order.status}">${order.status}</span>
+                    </div>
+                    <p class="text-sm text-slate-700 font-medium">${order.billing.first_name} ${order.billing.last_name}</p>
+                    <p class="text-xs text-slate-500 mt-1">${new Date(order.date_created).toLocaleDateString('en-US', {
+                        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    })}</p>
+                `;
+                orderDiv.addEventListener('click', () => selectOrder(order));
+                ordersList.appendChild(orderDiv);
+            });
+        }
+
+        // Render Pagination
+        function renderPagination() {
+            if (totalPages <= 1) {
+                paginationDiv.classList.add('hidden');
+            } else {
+                paginationDiv.classList.remove('hidden');
+                pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                prevBtn.disabled = currentPage === 1;
+                nextBtn.disabled = currentPage === totalPages;
+            }
+
+            // Update order count
+            if (totalOrders > 0) {
+                const startOrder = ((currentPage - 1) * 15) + 1;
+                const endOrder = Math.min(currentPage * 15, totalOrders);
+                orderCount.textContent = `${startOrder}-${endOrder} of ${totalOrders}`;
+            } else {
+                orderCount.textContent = 'No orders';
+            }
+        }
+
+        // Select Order
+        function selectOrder(order) {
+            selectedOrder = order;
+            noOrderSelected.classList.add('hidden');
+            orderDetails.classList.remove('hidden');
+            renderOrderDetails();
+        }
+
+        // Render Order Details
+        function renderOrderDetails() {
+            const order = selectedOrder;
+            orderDetails.innerHTML = `
+                <div class="fade-in">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-900">Order #${order.number}</h2>
+                            <p class="text-slate-600 text-sm mt-1">${new Date(order.date_created).toLocaleString()}</p>
+                        </div>
+                        <span class="status-badge status-${order.status}">${order.status}</span>
+                    </div>
+
+                    <!-- Customer Info -->
+                    <div class="bg-slate-50 rounded-lg p-4 mb-6">
+                        <h3 class="font-semibold text-slate-900 mb-3">Customer Information</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p class="text-slate-600 font-medium">Billing</p>
+                                <p class="text-slate-900">${order.billing.first_name} ${order.billing.last_name}</p>
+                                <p class="text-slate-700">${order.billing.email}</p>
+                                <p class="text-slate-700">${order.billing.phone || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p class="text-slate-600 font-medium">Shipping</p>
+                                <p class="text-slate-900">${order.shipping.first_name} ${order.shipping.last_name}</p>
+                                <p class="text-slate-700">${order.shipping.address_1}</p>
+                                ${order.shipping.address_2 ? `<p class="text-slate-700">${order.shipping.address_2}</p>` : ''}
+                                <p class="text-slate-700">${order.shipping.city}, ${order.shipping.state} ${order.shipping.postcode}</p>
+                                <p class="text-slate-700">${order.shipping.country}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Line Items -->
+                    <div class="mb-6">
+                        <h3 class="font-semibold text-slate-900 mb-3">Order Items</h3>
+                        <div class="border border-slate-200 rounded-lg overflow-hidden">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-100">
+                                    <tr>
+                                        <th class="text-left p-3 font-semibold text-slate-700">Product</th>
+                                        <th class="text-center p-3 font-semibold text-slate-700">Qty</th>
+                                        <th class="text-right p-3 font-semibold text-slate-700">Price</th>
+                                        <th class="text-right p-3 font-semibold text-slate-700">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    ${order.line_items.map(item => {
+                                        const imageUrl = item.image?.src || null;
+                                        return `
+                                        <tr>
+                                            <td class="p-3 text-slate-900">
+                                                <div class="flex items-center gap-3">
+                                                    ${imageUrl ? `<img src="${imageUrl}" alt="${item.name}" class="w-12 h-12 object-cover rounded border border-slate-200" crossorigin="anonymous">` : '<div class="w-12 h-12 bg-slate-100 rounded flex items-center justify-center text-xs text-slate-400">No Image</div>'}
+                                                    <span>${item.name}</span>
+                                                </div>
+                                            </td>
+                                            <td class="p-3 text-center text-slate-700">${item.quantity}</td>
+                                            <td class="p-3 text-right text-slate-700">${order.currency_symbol}${parseFloat(item.price).toFixed(2)}</td>
+                                            <td class="p-3 text-right text-slate-900 font-medium">${order.currency_symbol}${parseFloat(item.total).toFixed(2)}</td>
+                                        </tr>
+                                    `}).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Order Totals -->
+                    <div class="bg-slate-50 rounded-lg p-4 mb-6">
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Subtotal</span>
+                                <span class="text-slate-900">${order.currency_symbol}${parseFloat(order.total - order.total_tax - order.shipping_total).toFixed(2)}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Shipping</span>
+                                <span class="text-slate-900">${order.currency_symbol}${parseFloat(order.shipping_total).toFixed(2)}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Tax</span>
+                                <span class="text-slate-900">${order.currency_symbol}${parseFloat(order.total_tax).toFixed(2)}</span>
+                            </div>
+                            <div class="flex justify-between pt-2 border-t border-slate-300">
+                                <span class="font-bold text-slate-900">Total</span>
+                                <span class="font-bold text-slate-900 text-lg">${order.currency_symbol}${parseFloat(order.total).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    ${order.customer_note ? `
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                        <h3 class="font-semibold text-slate-900 mb-2">Customer Note</h3>
+                        <p class="text-sm text-slate-700">${order.customer_note}</p>
+                    </div>
+                    ` : ''}
+
+                    <!-- Action Buttons -->
+                    <div class="flex gap-3">
+                        <button onclick="printPackingList()"
+                                class="flex-1 bg-slate-900 text-white font-semibold py-3 rounded-lg hover:bg-slate-800 transition shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]">
+                            Print Packing List
+                        </button>
+                        <button onclick="printReceipt()"
+                                class="flex-1 bg-slate-700 text-white font-semibold py-3 rounded-lg hover:bg-slate-600 transition shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]">
+                            Print Receipt
+                        </button>
+                        <button onclick="markAsCompleted()"
+                                class="flex-1 bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 transition shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]">
+                            Mark as Completed
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Print Packing List - using direct image URLs
+        window.printPackingList = async function() {
+            const order = selectedOrder;
+            console.log('Printing packing list for order:', order);
+            console.log('Line items:', order.line_items.map(item => ({
+                name: item.name,
+                hasImage: !!item.image,
+                imageSrc: item.image?.src
+            })));
+
+            const printArea = document.getElementById('printable-area');
+
+            const businessAddr = window.WC_CONFIG?.businessAddress || {};
+
+            printArea.innerHTML = `
+                <div style="padding: 40px; font-family: system-ui, -apple-system, sans-serif;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+                        <div>
+                            <h1 style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">Packing List</h1>
+                            <p style="color: #64748b;">Order #${order.number} - ${new Date(order.date_created).toLocaleDateString()}</p>
+                        </div>
+                        <!--${businessAddr.name ? `
+                        <div style="text-align: right; font-size: 14px; line-height: 1.6;">
+                            <strong>${businessAddr.name}</strong><br>
+                            ${businessAddr.address1 || ''}<br>
+                            ${businessAddr.address2 ? businessAddr.address2 + '<br>' : ''}
+                            ${businessAddr.city || ''}, ${businessAddr.state || ''} ${businessAddr.postcode || ''}<br>
+                            ${businessAddr.phone ? businessAddr.phone + '<br>' : ''}
+                            ${businessAddr.email || ''}
+                        </div>-->
+                        ` : ''}
+                
+                        <div style="margin-bottom: 30px;">
+                        <h2 style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">Company</h2>
+                        <p style="line-height: 1.6;">
+                            ${order.shipping.company}
+                            <!--${order.shipping.first_name} ${order.shipping.last_name}<br>
+                            ${order.shipping.address_1}<br>
+                            ${order.shipping.address_2 ? order.shipping.address_2 + '<br>' : ''}
+                            ${order.shipping.city}, ${order.shipping.state} ${order.shipping.postcode}<br>
+                            ${order.shipping.country}-->
+                        </p>
+                    </div>
+                </div>
+
+                    <h2 style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">Items to Pack:</h2>
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #000;">
+                                <th style="text-align: left; padding: 10px; font-weight: bold;">Image</th>
+                                <th style="text-align: left; padding: 10px; font-weight: bold;">Product</th>
+                                <th style="text-align: center; padding: 10px; font-weight: bold;">Quantity</th>
+                                <th style="text-align: center; padding: 10px; font-weight: bold;">Packed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${order.line_items.map(item => {
+                                console.log('Processing item for print:', item.name, 'Has image:', !!item.image, 'Image src:', item.image?.src);
+                                const imageUrl = item.image?.src || null;
+                                console.log('Image URL:', imageUrl);
+                                return `
+                                <tr style="border-bottom: 1px solid #e2e8f0;">
+                                    <td style="padding: 10px;">
+                                        ${imageUrl ? `<img src="${imageUrl}" alt="${item.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" crossorigin="anonymous">
+                                        <div style="display: none; width: 60px; height: 60px; background-color: #f1f5f9; border-radius: 4px; align-items: center; justify-content: center; font-size: 10px; color: #94a3b8;">Error</div>` : '<div style="width: 60px; height: 60px; background-color: #f1f5f9; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #94a3b8;">No Image</div>'}
+                                    </td>
+                                    <td style="padding: 10px;">${item.name}</td>
+                                    <td style="text-align: center; padding: 10px;">${item.quantity}</td>
+                                    <td style="text-align: center; padding: 10px;">☐</td>
+                                </tr>
+                            `}).join('')}
+                        </tbody>
+                    </table>
+
+                    ${order.customer_note ? `
+                    <div style="margin-top: 20px; padding: 15px; background-color: #f1f5f9; border-radius: 8px;">
+                        <h3 style="font-weight: bold; margin-bottom: 5px;">Customer Note:</h3>
+                        <p>${order.customer_note}</p>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+            printArea.classList.remove('hidden');
+
+            // Wait for images to load before printing
+            const images = printArea.querySelectorAll('img');
+            if (images.length > 0) {
+                await Promise.all(Array.from(images).map(img => {
+                    if (img.complete) return Promise.resolve();
+                    return new Promise((resolve) => {
+                        img.onload = () => {
+                            console.log('Image loaded successfully:', img.src);
+                            resolve();
+                        };
+                        img.onerror = () => {
+                            console.error('Image failed to load:', img.src);
+                            resolve(); // Continue even if image fails
+                        };
+                        // Timeout after 3 seconds
+                        setTimeout(resolve, 3000);
+                    });
+                }));
+            }
+
+            console.log('All images processed, printing now');
+            window.print();
+            printArea.classList.add('hidden');
+        };
+
+        // Print Receipt
+        window.printReceipt = function() {
+            const order = selectedOrder;
+            const printArea = document.getElementById('printable-area');
+            const businessAddr = window.WC_CONFIG?.businessAddress || {};
+
+            printArea.innerHTML = `
+                <div style="padding: 40px; font-family: system-ui, -apple-system, sans-serif;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+                    <!--<div>
+                        <h1 style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">Receipt</h1>
+                    </div>-->
+                    <div style="margin-bottom: 30px;">
+                    ${(() => {
+                        const hasShipping = order.shipping.address_1;
+                        const address = hasShipping ? order.shipping : order.billing;
+                        return `
+                            <h2 style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">${hasShipping ? 'Shipping' : 'Billing'} Information:</h2>
+                            <p style="line-height: 1.6;">
+                                ${address.first_name} ${address.last_name}<br>
+                                <!--${order.billing.email}<br>
+                                ${order.billing.phone || ''}<br>-->
+                                ${address.company ? address.company + '<br>' : ''}
+                                ${address.address_1}<br>
+                                ${address.address_2 ? address.address_2 + '<br>' : ''}
+                                ${address.city},<br> ${address.state}<br> ${address.postcode}<br>
+                                <!--${address.country}-->
+                            </p>
+                        `;
+                    })()}
+                </div>
+                    ${businessAddr.name ? `
+                    <div style="text-align: right; font-size: 14px; line-height: 1.6;">
+                        <strong>${businessAddr.name}</strong><br>
+                        ${businessAddr.address1 || ''}<br>
+                        ${businessAddr.address2 ? businessAddr.address2 + '<br>' : ''}
+                        ${businessAddr.city || ''}, ${businessAddr.state || ''} ${businessAddr.postcode || ''}<br>
+                        ${businessAddr.phone ? businessAddr.phone + '<br>' : ''}
+                        ${businessAddr.email || ''}
+                    </div>
+                    ` : ''}
+                    
+                </div>
+                
+                
+                <h1 style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">Receipt</h1>
+                <h2 style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">Order Details:</h2>
+                <p style="color: #64748b;">Order #${order.number} - ${new Date(order.date_created).toLocaleDateString()}</p>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #000;">
+                            <th style="text-align: left; padding: 10px; font-weight: bold;">Product</th>
+                            <th style="text-align: center; padding: 10px; font-weight: bold;">Qty</th>
+                            <th style="text-align: right; padding: 10px; font-weight: bold;">Price</th>
+                            <th style="text-align: right; padding: 10px; font-weight: bold;">Total</th>
+                        </tr>
+                    </thead>
+                        <tbody>
+                            ${order.line_items.map(item => `
+                                <tr style="border-bottom: 1px solid #e2e8f0;">
+                                    <td style="padding: 10px;">${item.name}</td>
+                                    <td style="text-align: center; padding: 10px;">${item.quantity}</td>
+                                    <td style="text-align: right; padding: 10px;">${order.currency_symbol}${parseFloat(item.price).toFixed(2)}</td>
+                                    <td style="text-align: right; padding: 10px;">${order.currency_symbol}${parseFloat(item.total).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div style="margin-left: auto; max-width: 300px;">
+                        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                            <span>Subtotal:</span>
+                            <span>${order.currency_symbol}${parseFloat(order.total - order.total_tax - order.shipping_total).toFixed(2)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                            <span>Shipping:</span>
+                            <span>${order.currency_symbol}${parseFloat(order.shipping_total).toFixed(2)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                            <span>Tax:</span>
+                            <span>${order.currency_symbol}${parseFloat(order.total_tax).toFixed(2)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-top: 2px solid #000; font-weight: bold; font-size: 18px;">
+                            <span>Total:</span>
+                            <span>${order.currency_symbol}${parseFloat(order.total).toFixed(2)}</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 40px; text-align: center; color: #64748b; font-size: 14px;">
+                        <p>Thank you for your business!</p>
+                    </div>
+                </div>
+            `;
+
+            printArea.classList.remove('hidden');
+            window.print();
+            printArea.classList.add('hidden');
+        };
+
+        // Mark Order as Completed
+        window.markAsCompleted = async function() {
+            if (!selectedOrder) return;
+
+            const confirmed = confirm(`Mark order #${selectedOrder.number} as completed?\n\nThis will update the order status to "completed" in WooCommerce.`);
+            if (!confirmed) return;
+
+            try {
+                const auth = btoa(`${credentials.consumerKey}:${credentials.consumerSecret}`);
+                const response = await fetch(`${credentials.siteUrl}/wp-json/wc/v3/orders/${selectedOrder.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        status: 'completed'
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMessage = errorData.message || `HTTP ${response.status}: ${response.statusText}`;
+                    throw new Error(errorMessage);
+                }
+
+                const updatedOrder = await response.json();
+
+                // Update the order in the orders array
+                const orderIndex = orders.findIndex(o => o.id === updatedOrder.id);
+                if (orderIndex !== -1) {
+                    orders[orderIndex] = updatedOrder;
+                }
+
+                // Update selected order
+                selectedOrder = updatedOrder;
+
+                // Refresh the display
+                renderOrders();
+                renderOrderDetails();
+
+                alert(`Order #${updatedOrder.number} has been marked as completed!`);
+            } catch (error) {
+                console.error('Error updating order:', error);
+                alert(`Failed to update order status.\n\nError: ${error.message}\n\nPlease check:\n- Your API credentials have write permissions\n- The order can be updated to "completed" status`);
+            }
+        };
+
+        // Initialize on page load
+        init();
+    </script>
+</body>
+</html>
